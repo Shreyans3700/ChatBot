@@ -31,3 +31,9 @@ system_prompt = """
 
     Maintain a professional, friendly, and conversational tone throughout the interaction.
 """
+
+title_prompt = """
+    Based on the given user query, Generate a title for the session.
+    This is a name for session of a chatbot.
+    Keep the title Concise and under 100 characters.
+"""

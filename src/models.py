@@ -20,6 +20,10 @@ class ResponseModel(BaseModel):
 class SessionHistoryRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=128)
 
+class SessionMetaData(BaseModel):
+    session_id: str = Field(min_length=1, max_length=128)
+    title: str = Field(min_length=1, max_length=128)
+
 
 class Session(BaseModel):
     sequence_no: int
@@ -29,5 +33,6 @@ class Session(BaseModel):
 
 class SessionHistoryResponse(BaseModel):
     session_id: str = Field(min_length=1, max_length=128)
+    title: str = Field(min_length=1, max_length=128)
     history: List[Session] = []
     status_code: int = Field(200, ge=100, le=599)

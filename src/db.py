@@ -1,10 +1,10 @@
 import json
 import logging
 from typing import Any, List
-
+from src.models import SessionMetaData
 from langchain_core.messages import AIMessage, HumanMessage, trim_messages
 
-from src.config import MAX_CHAT_HISTORY_MESSAGES
+from src.config import MAX_CHAT_TOKENS
 from src.models import Session
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,22 @@ def _serialize_message_content(content: Any) -> str:
     return str(content)
 
 
-async def get_session_history_from_db(session_id: str, db) -> List[Session]:
+async def get_sessions_from_db(db) -> List[SessionMetaData]:
+    async with db.acquire() as connection:
+        sessions = await connection.fetch("""
+                select session_id, title
+                from sessions
+            """)
+
+        sessions = [
+            SessionMetaData(session_id=row["session_id"], title=row["title"])
+            for row in sessions
+        ]
+
+    return sessions
+
+
+async def get_session_history_from_db(session_id: str, db) -> dict:
     async with db.acquire() as connection:
         rows = await connection.fetch(
             """
@@ -53,14 +68,23 @@ async def get_session_history_from_db(session_id: str, db) -> List[Session]:
             """,
             session_id,
         )
+        title_row = await connection.fetchrow(
+            """
+                select title
+                from sessions
+                where session_id=$1
+            """,
+            session_id,
+        )
+        title = title_row["title"] if title_row else None
         history = [
             Session(sequence_no=row["id"], role=row["role"], content=row["content"])
             for row in rows
         ]
-        return history
+        return {"history": history, "title": title}
 
 
-async def get_session_history(session_id: str, db):
+async def get_session_history(session_id: str, db, llm):
     async with db.acquire() as connection:
         rows = await connection.fetch(
             """
@@ -83,18 +107,15 @@ async def get_session_history(session_id: str, db):
 
     return trim_messages(
         history,
-        max_tokens=MAX_CHAT_HISTORY_MESSAGES,
-        token_counter=lambda messages: len(messages),
+        max_tokens=MAX_CHAT_TOKENS,
+        token_counter=llm,
         strategy="last",
         allow_partial=True,
     )
 
 
 async def update_session_history(
-    session_id: str,
-    user_message: str,
-    ai_message: AIMessage,
-    db,
+    session_id: str, user_message: str, ai_message: AIMessage, db, title
 ) -> bool:
     user_content = _serialize_message_content(user_message)
     ai_content = _serialize_message_content(
@@ -105,11 +126,12 @@ async def update_session_history(
             async with connection.transaction():
                 await connection.execute(
                     """
-                    INSERT INTO sessions (session_id)
-                    VALUES ($1)
+                    INSERT INTO sessions (session_id, title)
+                    VALUES ($1, $2)
                     ON CONFLICT (session_id) DO NOTHING
                     """,
                     session_id,
+                    title,
                 )
                 await connection.execute(
                     """
@@ -137,5 +159,7 @@ async def update_session_history(
                 )
         return True
     except Exception as exc:
-        logger.exception("Failed to persist conversation history for session %s", session_id)
+        logger.exception(
+            "Failed to persist conversation history for session %s", session_id
+        )
         return False

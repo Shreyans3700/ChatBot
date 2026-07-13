@@ -3,10 +3,15 @@ from typing import AsyncGenerator
 import json
 import time
 from langchain_core.messages import AIMessage
+from src.config import llm
 
 
-async def get_answer(session_id: str, user_query: str, db, chain) -> dict:
-    history = await get_session_history(session_id=session_id, db=db)
+async def get_answer(session_id: str, user_query: str, db, chain, title_chain) -> dict:
+    history = await get_session_history(session_id=session_id, db=db, llm=llm)
+    title = None
+    if len(history) == 0:
+        title = await title_chain.ainvoke({"query": user_query})
+        title = str(title.content)
     response = await chain.ainvoke({"chat_history": history, "query": user_query})
 
     metadata = response.response_metadata
@@ -21,6 +26,7 @@ async def get_answer(session_id: str, user_query: str, db, chain) -> dict:
         user_message=user_query,
         ai_message=response,
         db=db,
+        title=title,
     )
     if not save_status:
         raise RuntimeError("Failed to persist conversation history")
@@ -34,10 +40,7 @@ async def get_answer(session_id: str, user_query: str, db, chain) -> dict:
 
 
 async def stream_answer(
-    session_id: str,
-    user_query: str,
-    db,
-    chain,
+    session_id: str, user_query: str, db, chain, title_chain
 ) -> AsyncGenerator[str, None]:
 
     # -------------------------
@@ -46,8 +49,12 @@ async def stream_answer(
     history = await get_session_history(
         session_id=session_id,
         db=db,
+        llm=llm
     )
-
+    title = None
+    if len(history) == 0:
+        title = await title_chain.ainvoke({"query": user_query})
+        title = str(title.content)
     final_answer = ""
 
     model_name = "unknown"
@@ -156,6 +163,7 @@ async def stream_answer(
         user_message=user_query,
         ai_message=final_ai_message,
         db=db,
+        title=title
     )
 
     # -------------------------
