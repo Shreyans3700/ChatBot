@@ -34,6 +34,7 @@ Create a `.env` file in the project root with the following variables:
 
 ```env
 GROQ_API_KEY=your_groq_api_key
+AUTH_API_KEY=your_internal_api_key
 GROQ_MODEL=qwen/qwen3.6-27b
 DB_HOST=localhost
 DB_USER=postgres
@@ -60,15 +61,40 @@ venv\Scripts\activate      # Windows
 pip install -r requirements.txt
 ```
 
-3. Start the application
+3. Start the backend application
 
 ```bash
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
+4. Start the Streamlit frontend
+
+```bash
+streamlit run frontend.py
+```
+
 The API will be available at:
 
 - http://localhost:8000/
+
+The frontend will run on the default Streamlit port, usually:
+
+- http://localhost:8501/
+
+## Frontend
+
+The `frontend.py` Streamlit app is included in this repository and provides a simple chat UI with session navigation.
+
+- Set the backend URL and API key in the sidebar.
+- The frontend sends requests to the backend using `X-API-Key`.
+- It can display saved sessions and load their history.
+
+If you prefer to keep secrets out of your code, create a `.streamlit/secrets.toml` file with:
+
+```toml
+BACKEND_URL = "http://localhost:8000"
+API_KEY = "your_internal_api_key"
+```
 
 ## API Endpoints
 
@@ -83,6 +109,7 @@ curl http://localhost:8000/
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
+  -H "x-api-key: $AUTH_API_KEY" \
   -d '{
     "session_id": "demo-session",
     "user_query": "Hello!"
@@ -94,6 +121,7 @@ curl -X POST http://localhost:8000/chat \
 ```bash
 curl -N -X POST http://localhost:8000/chat/stream \
   -H "Content-Type: application/json" \
+  -H "x-api-key: $AUTH_API_KEY" \
   -d '{
     "session_id": "demo-session",
     "user_query": "Tell me a short joke"
@@ -103,7 +131,8 @@ curl -N -X POST http://localhost:8000/chat/stream \
 ### Get session history
 
 ```bash
-curl "http://localhost:8000/getSessionHistory?session_id=demo-session"
+curl -H "x-api-key: $AUTH_API_KEY" \
+  "http://localhost:8000/getSessionHistory?session_id=demo-session"
 ```
 
 ## Docker
