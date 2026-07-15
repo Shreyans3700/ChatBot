@@ -5,7 +5,7 @@ import asyncpg
 from fastapi import FastAPI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_groq import ChatGroq
-from src.prompts import system_prompt, title_prompt
+from src.config.prompts import system_prompt, title_prompt
 
 MAX_CHAT_TOKENS = int(os.getenv("MAX_CHAT_TOKENS", "2500"))
 
@@ -46,11 +46,11 @@ async def set_environment(app: FastAPI):
     app.state.chain = app.state.qa_prompt | llm
     app.state.title_chain = app.state.title_prompt | llm
     app.state.db = await asyncpg.create_pool(
-        host=required_setting("DB_HOST"),
-        port=int("5432"),
-        database="LangchainDB",
-        user=required_setting("DB_USER"),
-        password=required_setting("DB_PASSWORD"),
+        host=required_setting("PG_HOST"),
+        port=int(required_setting("PG_PORT")),
+        database=required_setting("PG_DATABASE"),
+        user=required_setting("PG_USER"),
+        password=required_setting("PG_PASSWORD"),
         min_size=1,
         max_size=int(os.getenv("DB_POOL_SIZE", "10")),
     )

@@ -26,7 +26,7 @@ Before running the project, make sure you have:
 
 - Python 3.11+
 - PostgreSQL running and reachable
-- A Groq API key
+- A Groq API key for the backend model
 
 ## Environment Variables
 
@@ -85,9 +85,9 @@ The frontend will run on the default Streamlit port, usually:
 
 The `frontend.py` Streamlit app is included in this repository and provides a simple chat UI with session navigation.
 
-- Set the backend URL and API key in the sidebar.
-- The frontend sends requests to the backend using `X-API-Key`.
-- It can display saved sessions and load their history.
+- Set the backend URL in the sidebar. The frontend shows `Enter your API key to start.` until you provide the API key.
+- The frontend sends requests to the backend using `X-API-Key` once an API key is entered.
+- It can display saved sessions and load their history after authentication.
 
 If you prefer to keep secrets out of your code, create a `.streamlit/secrets.toml` file with:
 
@@ -146,6 +146,6 @@ docker run --env-file .env -p 8000:8000 chatbot
 
 ## Notes
 
-- The app stores all message history in PostgreSQL.
+- The app stores all message history in PostgreSQL and keeps session titles on the session row.
 - The context sent to the model is trimmed to the most recent configured number of messages to avoid excessive prompt size.
 - If you want to change the context window size, update `MAX_CHAT_HISTORY_MESSAGES` in your `.env` file.

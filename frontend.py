@@ -37,12 +37,12 @@ HEADERS = {"X-API-Key": api_key, "Content-Type": "application/json"}
 # Backend calls
 # -----------------------------------------------------------------------
 def fetch_sessions() -> list[dict]:
+    if not api_key:
+        return []
     try:
-        # Matches the backend's actual route name: /getSessionMetaData.
         resp = requests.get(f"{backend_url}/getSessionMetaData", headers=HEADERS, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        # Endpoint currently returns a bare list, not {"sessions": [...]}.
         return data if isinstance(data, list) else data.get("sessions", [])
     except requests.RequestException as e:
         st.sidebar.error(f"Could not load sessions: {e}")
@@ -50,14 +50,13 @@ def fetch_sessions() -> list[dict]:
 
 
 def load_session_history(session_id: str) -> list[dict]:
+    if not api_key:
+        return []
     try:
-        # NOTE: matches the current backend, which reads session_id from the
-        # JSON body even on a GET request. If you apply the Query(...) fix
-        # from the code review, switch `json=` to `params=` below.
         resp = requests.get(
             f"{backend_url}/getSessionHistory",
             headers=HEADERS,
-            json={"session_id": session_id},
+            params={"session_id": session_id},
             timeout=10,
         )
         resp.raise_for_status()
@@ -75,9 +74,11 @@ def load_session_history(session_id: str) -> list[dict]:
 
 
 def stream_chat_response(session_id: str, user_query: str):
-    """Generator that yields answer tokens as they arrive, and stashes the
-    final metadata (model/tokens/latency) in session_state when the
-    'done' event arrives."""
+    """Yield answer tokens as they arrive and store the final metadata."""
+    if not api_key:
+        yield "Enter your API key to start."
+        return
+
     payload = {"session_id": session_id, "user_query": user_query}
     try:
         with requests.post(
@@ -140,19 +141,20 @@ with st.sidebar:
 
     st.caption("Click a session to load its history.")
 
-    sessions = fetch_sessions()
-    if not sessions:
-        st.caption("No saved sessions yet — send a message to create one.")
-    for s in sessions:
-        session_id = s["session_id"]
-        # Sessions now carry a real title (see title-generation feature);
-        # fall back to the short session id if it's ever missing/empty.
-        title = (s.get("title") or "").strip() or session_id[:8]
-        is_current = session_id == st.session_state.current_session_id
-        button_label = f"{'➤ ' if is_current else ''}{title}"
-        if st.button(button_label, key=f"session_{session_id}", use_container_width=True):
-            switch_session(session_id)
-            st.rerun()
+    if not api_key:
+        st.caption("Enter your API key to start.")
+    else:
+        sessions = fetch_sessions()
+        if not sessions:
+            st.caption("No saved sessions yet - send a message to create one.")
+        for s in sessions:
+            session_id = s["session_id"]
+            title = (s.get("title") or "").strip() or session_id[:8]
+            is_current = session_id == st.session_state.current_session_id
+            button_label = f"{'? ' if is_current else ''}{title}"
+            if st.button(button_label, key=f"session_{session_id}", use_container_width=True):
+                switch_session(session_id)
+                st.rerun()
 
     st.divider()
     st.caption(f"Current session: `{st.session_state.current_session_id[:8]}`")
@@ -163,31 +165,32 @@ with st.sidebar:
 # -----------------------------------------------------------------------
 st.title("ChatBot")
 
+if not api_key:
+    st.info("Enter your API key to start.")
+    st.stop()
+
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
 if prompt := st.chat_input("Type your message..."):
-    if not api_key:
-        st.error("Enter your API key in the sidebar first.")
-    else:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-        with st.chat_message("assistant"):
-            answer = st.write_stream(
-                stream_chat_response(st.session_state.current_session_id, prompt)
-            )
+    with st.chat_message("assistant"):
+        answer = st.write_stream(
+            stream_chat_response(st.session_state.current_session_id, prompt)
+        )
 
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+    st.session_state.messages.append({"role": "assistant", "content": answer})
 
-        meta = st.session_state.pop("_last_meta", None)
-        if meta:
-            latency = meta.get("latency")
-            latency_str = f"{latency:.2f}s" if isinstance(latency, (int, float)) else "n/a"
-            st.caption(
-                f"model: {meta.get('model', 'unknown')} · "
-                f"tokens: {meta.get('tokens', 'n/a')} · "
-                f"latency: {latency_str}"
-            )
+    meta = st.session_state.pop("_last_meta", None)
+    if meta:
+        latency = meta.get("latency")
+        latency_str = f"{latency:.2f}s" if isinstance(latency, (int, float)) else "n/a"
+        st.caption(
+            f"model: {meta.get('model', 'unknown')} | "
+            f"tokens: {meta.get('tokens', 'n/a')} | "
+            f"latency: {latency_str}"
+        )

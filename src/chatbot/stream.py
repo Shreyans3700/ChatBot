@@ -1,60 +1,26 @@
-from src.db import get_session_history, update_session_history
 from typing import AsyncGenerator
 import json
 import time
+
 from langchain_core.messages import AIMessage
-from src.config import llm
 
-
-async def get_answer(session_id: str, user_query: str, db, chain, title_chain) -> dict:
-    history = await get_session_history(session_id=session_id, db=db, llm=llm)
-    title = None
-    if len(history) == 0:
-        title = await title_chain.ainvoke({"query": user_query})
-        title = str(title.content)
-    response = await chain.ainvoke({"chat_history": history, "query": user_query})
-
-    metadata = response.response_metadata
-    token_usage = metadata.get("token_usage") or {}
-    final_response = str(response.content)
-    model_used = str(metadata.get("model_name", "unknown"))
-    total_token_used = int(token_usage.get("total_tokens", 0))
-    time_taken = float(token_usage.get("total_time", 0.0))
-
-    save_status = await update_session_history(
-        session_id=session_id,
-        user_message=user_query,
-        ai_message=response,
-        db=db,
-        title=title,
-    )
-    if not save_status:
-        raise RuntimeError("Failed to persist conversation history")
-
-    return {
-        "answer": final_response,
-        "model_used": model_used,
-        "tokens": total_token_used,
-        "latency_time": time_taken,
-    }
+from src.database.fetch_data import get_session_history
+from src.database.update_data import update_session_history
 
 
 async def stream_answer(
     session_id: str, user_query: str, db, chain, title_chain
 ) -> AsyncGenerator[str, None]:
-
-    # -------------------------
-    # Load Previous History
-    # -------------------------
     history = await get_session_history(
         session_id=session_id,
         db=db,
-        llm=llm
     )
     title = None
     if len(history) == 0:
+        print("This is a new chat")
         title = await title_chain.ainvoke({"query": user_query})
         title = str(title.content)
+        print("Title for the chat:", title)
     final_answer = ""
 
     model_name = "unknown"
@@ -82,10 +48,6 @@ async def stream_answer(
             return dict(source.response_metadata)
         return {}
 
-    # -------------------------
-    # Stream Events
-    # -------------------------
-
     async for event in chain.astream_events(
         {
             "chat_history": history,
@@ -93,31 +55,19 @@ async def stream_answer(
         },
         version="v2",
     ):
-
         event_type = event["event"]
 
-        # -------------------------
-        # Token Streaming
-        # -------------------------
-
         if event_type == "on_chat_model_stream":
-
             chunk = event["data"]["chunk"]
 
             if chunk.content:
                 final_answer += chunk.content
-
                 yield (
                     f"event: token\n"
                     f"data: {json.dumps({'token': chunk.content})}\n\n"
                 )
 
-        # -------------------------
-        # Model Finished
-        # -------------------------
-
         elif event_type in {"on_chat_model_end", "on_llm_end", "on_chain_end"}:
-
             output = event["data"].get("output")
             event_metadata = event.get("metadata") or {}
             usage_metadata = _get_token_usage(output)
@@ -143,10 +93,6 @@ async def stream_answer(
             latency = float(latency)
             model_name = str(model_metadata.get("model_name", "unknown"))
 
-    # -------------------------
-    # Save History
-    # -------------------------
-
     final_ai_message = AIMessage(
         content=final_answer,
         response_metadata={
@@ -163,12 +109,8 @@ async def stream_answer(
         user_message=user_query,
         ai_message=final_ai_message,
         db=db,
-        title=title
+        title=title,
     )
-
-    # -------------------------
-    # Final Event
-    # -------------------------
 
     payload = {
         "model": model_name,
