@@ -5,9 +5,14 @@ import asyncpg
 from fastapi import FastAPI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_groq import ChatGroq
+
 from src.config.prompts import system_prompt, title_prompt
 
 MAX_CHAT_TOKENS = int(os.getenv("MAX_CHAT_TOKENS", "2500"))
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60")
+)
+PASSWORD_HASH_ITERATIONS = int(os.getenv("PASSWORD_HASH_ITERATIONS", "210000"))
 
 chat_model = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
 
@@ -57,9 +62,18 @@ async def set_environment(app: FastAPI):
 
     try:
         async with app.state.db.acquire() as connection:
-            await connection.execute("""
+            await connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
                 CREATE TABLE IF NOT EXISTS sessions (
                     session_id TEXT PRIMARY KEY,
+                    user_id TEXT,
                     title TEXT NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -74,7 +88,13 @@ async def set_environment(app: FastAPI):
                 );
                 CREATE INDEX IF NOT EXISTS messages_session_id_id_idx
                     ON messages (session_id, id);
-                """)
+                CREATE INDEX IF NOT EXISTS sessions_user_id_idx
+                    ON sessions (user_id);
+                """
+            )
+            await connection.execute(
+                "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_id TEXT"
+            )
         yield
     finally:
         await app.state.db.close()

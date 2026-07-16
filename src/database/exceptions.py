@@ -1,0 +1,2 @@
+class SessionAccessError(Exception):
+    pass

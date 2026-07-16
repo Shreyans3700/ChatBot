@@ -20,6 +20,7 @@ class ResponseModel(BaseModel):
 class SessionHistoryRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=128)
 
+
 class SessionMetaData(BaseModel):
     session_id: str = Field(min_length=1, max_length=128)
     title: str = Field(min_length=1, max_length=128)
@@ -34,5 +35,31 @@ class Session(BaseModel):
 class SessionHistoryResponse(BaseModel):
     session_id: str = Field(min_length=1, max_length=128)
     title: str = Field(min_length=1, max_length=128)
-    history: List[Session] = []
+    history: List[Session] = Field(default_factory=list)
     status_code: int = Field(200, ge=100, le=599)
+
+
+class SignupRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=256)
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=256)
+
+
+class UserResponse(BaseModel):
+    id: str = Field(min_length=1, max_length=128)
+    email: str = Field(min_length=3, max_length=254)
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
+
+class CurrentUser(BaseModel):
+    id: str = Field(min_length=1, max_length=128)
+    email: str = Field(min_length=3, max_length=254)

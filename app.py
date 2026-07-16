@@ -2,8 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from src.config.config import set_environment
-from src.routes import chat_router
-from src.routes import sessions_router
+from src.routes import auth_router, chat_router, sessions_router
 
 app = FastAPI(
     title="EndToEndChatBot",
@@ -12,6 +11,7 @@ app = FastAPI(
     lifespan=set_environment,
 )
 
+app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(sessions_router)
 
@@ -23,5 +23,3 @@ async def index():
 
 if __name__ == "__main__":
     uvicorn.run(app=app, host="0.0.0.0", port=8000)
-
-
