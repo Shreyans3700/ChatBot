@@ -149,3 +149,5 @@ docker run --env-file .env -p 8000:8000 chatbot
 - The app stores all message history in PostgreSQL and keeps session titles on the session row.
 - The context sent to the model is trimmed to the most recent configured number of messages to avoid excessive prompt size.
 - If you want to change the context window size, update `MAX_CHAT_HISTORY_MESSAGES` in your `.env` file.
+
+- The streaming endpoint falls back to the final end-of-stream answer when a model emits empty chunks, which prevents blank summarization responses in the UI.

@@ -1,4 +1,4 @@
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 import json
 import time
 
@@ -6,6 +6,24 @@ from langchain_core.messages import AIMessage
 
 from src.database.fetch_data import get_session_history
 from src.database.update_data import update_session_history
+
+
+def _extract_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "content"):
+        value = getattr(value, "content")
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                parts.append(str(item.get("text", item)))
+            elif hasattr(item, "content"):
+                parts.append(str(getattr(item, "content")))
+            else:
+                parts.append(str(item))
+        return "".join(parts)
+    return str(value)
 
 
 async def stream_answer(
@@ -21,7 +39,9 @@ async def stream_answer(
         title = await title_chain.ainvoke({"query": user_query})
         title = str(title.content)
         print("Title for the chat:", title)
+
     final_answer = ""
+    saw_nonempty_chunk = False
 
     model_name = "unknown"
     total_tokens = 0
@@ -59,12 +79,14 @@ async def stream_answer(
 
         if event_type == "on_chat_model_stream":
             chunk = event["data"]["chunk"]
+            chunk_text = _extract_text(chunk)
 
-            if chunk.content:
-                final_answer += chunk.content
+            if chunk_text:
+                saw_nonempty_chunk = True
+                final_answer += chunk_text
                 yield (
                     f"event: token\n"
-                    f"data: {json.dumps({'token': chunk.content})}\n\n"
+                    f"data: {json.dumps({'token': chunk_text})}\n\n"
                 )
 
         elif event_type in {"on_chat_model_end", "on_llm_end", "on_chain_end"}:
@@ -92,6 +114,17 @@ async def stream_answer(
                 latency = time.perf_counter() - start_time
             latency = float(latency)
             model_name = str(model_metadata.get("model_name", "unknown"))
+
+            if not final_answer and output is not None:
+                final_answer = _extract_text(output)
+
+    final_answer = final_answer.strip()
+
+    if final_answer and not saw_nonempty_chunk:
+        yield (
+            "event: token\n"
+            f"data: {json.dumps({'token': final_answer})}\n\n"
+        )
 
     final_ai_message = AIMessage(
         content=final_answer,
