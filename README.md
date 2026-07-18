@@ -1,4 +1,4 @@
-# EndToEndChatBot
+# nexus-rag
 
 EndToEndChatBot is a FastAPI-based chatbot application that uses LangChain and OpenAI to generate responses while keeping chat history in PostgreSQL for each authenticated user. It includes a full **RAG (Retrieval-Augmented Generation) pipeline** — upload documents to a session, and the chatbot will ground its answers using the most relevant chunks from those documents.
 
